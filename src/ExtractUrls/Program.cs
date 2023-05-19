@@ -1,6 +1,8 @@
 ﻿using System.Net;
 using System.Text;
 using HtmlAgilityPack;
+using LanguageExt;
+using static LanguageExt.Prelude;
 using static ExtractUrls.LinkUtils;
 
 if (args.Length == 0)
@@ -47,7 +49,7 @@ foreach (var link in links)
     try
     {
         var linkDoc = GetHtmlDocument(link.Href);
-        var title = link.Title ?? GetTitle(linkDoc) ?? link.Href;
+        var title =  link.Title ?? GetTitle(linkDoc).IfNone(link.Href);
         var description = linkDoc.DocumentNode.Descendants("meta")
             .Where(m => m.GetAttributeValue("name", "") == "description")
             .Select(m => m.GetAttributeValue("content", ""))
@@ -88,41 +90,18 @@ foreach (var link in links)
         linkDoc.Load(linkStream);
         return linkDoc;
     }
-
-    static string? GetTitle(HtmlDocument linkDoc)
+    static Option<string> GetTitle(HtmlDocument linkDoc)
     {
-        var title = linkDoc.DocumentNode.Descendants("title").FirstOrDefault()?.InnerText;
-        if (string.IsNullOrWhiteSpace(title))
+        var tags = new[] {"title", "h1", "h2", "h3", "h4", "h5", "h6"};
+        
+        foreach (var tag in tags)
         {
-            title = linkDoc.DocumentNode.Descendants("h1").FirstOrDefault()?.InnerText;
-        }
+            var node = linkDoc.DocumentNode.Descendants(tag).FirstOrDefault();
 
-        if (string.IsNullOrWhiteSpace(title))
-        {
-            title = linkDoc.DocumentNode.Descendants("h2").FirstOrDefault()?.InnerText;
+            if (node != null && !string.IsNullOrWhiteSpace(node.InnerText))
+                return TrimTitle(node.InnerText);
         }
-
-        if (string.IsNullOrWhiteSpace(title))
-        {
-            title = linkDoc.DocumentNode.Descendants("h3").FirstOrDefault()?.InnerText;
-        }
-
-        if (string.IsNullOrWhiteSpace(title))
-        {
-            title = linkDoc.DocumentNode.Descendants("h4").FirstOrDefault()?.InnerText;
-        }
-
-        if (string.IsNullOrWhiteSpace(title))
-        {
-            title = linkDoc.DocumentNode.Descendants("h5").FirstOrDefault()?.InnerText;
-        }
-
-        if (string.IsNullOrWhiteSpace(title))
-        {
-            title = linkDoc.DocumentNode.Descendants("h6").FirstOrDefault()?.InnerText;
-        }
-
-        return  TrimTitle(title);
+        return None;
     }
 }
 
