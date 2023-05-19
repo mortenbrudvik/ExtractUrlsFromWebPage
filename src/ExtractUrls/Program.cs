@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using System.Text;
 using HtmlAgilityPack;
+using static ExtractUrls.LinkUtils;
 
 if (args.Length == 0)
 {
@@ -31,8 +32,8 @@ var links = doc.DocumentNode.Descendants("a")
     .Select(a => 
         new
         {
-            Href = a.GetAttributeValue("href", null), 
-            Title = RemoveNewLines(a.InnerText.Trim())
+            Href = DecodeUrl(a.GetAttributeValue("href", null)), 
+            Title = TrimTitle(a.InnerText.Trim())
         })
     .Where(a => !string.IsNullOrEmpty(a.Href) && a.Href.StartsWith("http") &&
                 !new Uri(a.Href).Host.Equals(rootUri.Host))
@@ -121,9 +122,8 @@ foreach (var link in links)
             title = linkDoc.DocumentNode.Descendants("h6").FirstOrDefault()?.InnerText;
         }
 
-        return  RemoveNewLines(title);
+        return  TrimTitle(title);
     }
 }
 
-static string? RemoveNewLines(string? input) => 
-    !string.IsNullOrWhiteSpace(input) ? input.Trim().Replace("\r", " ").Replace("\n", " ") : null;
+
