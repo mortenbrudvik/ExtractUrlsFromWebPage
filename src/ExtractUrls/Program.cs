@@ -1,7 +1,14 @@
 ﻿using System.Net;
 using HtmlAgilityPack;
 
-var url = "https://thenetworkstate.com/the-one-commandment";
+if (args.Length == 0)
+{
+    Console.WriteLine("Please provide a URL as a command-line argument.");
+    return;
+}
+
+var url = args[0];
+
 var web = new HtmlWeb();
 web.PreRequest += request =>
 {
@@ -38,12 +45,12 @@ foreach (var link in links)
             .FirstOrDefault();
 
         Console.Out.WriteLine("Title: {0}", string.IsNullOrWhiteSpace(title) ? "No title" : title);
-        
+
         var mdLink = string.IsNullOrWhiteSpace(title) ? $"{link}" : $"[{title}]({link})";
         writer.WriteLine(mdLink);
         if (!string.IsNullOrWhiteSpace(description))
             writer.WriteLine(description);
-        
+
         writer.WriteLine();
     }
     catch (Exception e)
