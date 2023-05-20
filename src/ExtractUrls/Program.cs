@@ -10,7 +10,7 @@ Console.Out.WriteLine("Processing {0}", args[0]);
 
 var url = args[0];
 
-var document = LoadHtmlDocument(url);
+var document = await LoadHtmlDocumentFromUrl(url);
 
 var rootUri = new Uri(url);
 var links = ExtractLinks(document, rootUri);

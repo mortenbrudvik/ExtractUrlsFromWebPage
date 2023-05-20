@@ -6,11 +6,6 @@ namespace ExtractUrls.Tests;
 
 public class LinkUtilsTests : XunitContextBase
 {
-    [Fact]
-    public void DecodeUrl_ShouldUnEscapeAmp() =>
-        DecodeUrl("https://www.google.com/search?q=hello&amp;a=hello")
-            .Should().Be("https://www.google.com/search?q=hello&a=hello");
-    
     [Fact] public void TrimTitle_Should_Trim_And_Remove_Line_Breaks() => 
         TrimTitle("   Hello, \rWorld\n!  ")
             .Should().Be("Hello,  World !");

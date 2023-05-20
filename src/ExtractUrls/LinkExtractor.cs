@@ -1,6 +1,4 @@
-using System.Net;
-using System.Text;
-using HtmlAgilityPack;
+using AngleSharp;
 using LanguageExt;
 using static LanguageExt.Prelude;
 using static ExtractUrls.LinkUtils;
@@ -9,32 +7,22 @@ namespace ExtractUrls;
 
 public static class LinkExtractor
 {
-    public static HtmlDocument LoadHtmlDocument(string url)
+    public static async Task<AngleSharp.Dom.IDocument> LoadHtmlDocumentFromUrl(string url)
     {
-        var web = new HtmlWeb
-        {
-            AutoDetectEncoding = false,
-            OverrideEncoding = Encoding.UTF8
-        };
-
-        web.PreRequest += request =>
-        {
-            request.Headers["User-Agent"] =
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3 Edge/16.16299";
-            return true;
-        };
-
-        return web.Load(url);
+        var config = Configuration.Default.WithDefaultLoader();
+        var context = BrowsingContext.New(config);
+        var document = await context.OpenAsync(url);
+        return document;
     }
 
-    public static List<Link> ExtractLinks(HtmlDocument document, Uri rootUri)
+    public static List<Link> ExtractLinks(AngleSharp.Dom.IDocument document, Uri rootUri)
     {
-        return document.DocumentNode.Descendants("a")
-            .Where(l => IsValidLink(l.GetAttributeValue("href", null), rootUri))
+        return document.QuerySelectorAll("a")
+            .Where(l => IsValidLink(l.GetAttribute("href"), rootUri))
             .Select(a => new Link
             {
-                Href = DecodeUrl(a.GetAttributeValue("href", null)),
-                Title = TrimTitle(a.InnerText.Trim())
+                Href = a.GetAttribute("href"),
+                Title = TrimTitle(a.TextContent.Trim())
             })
             .ToList();
     }
@@ -53,7 +41,7 @@ public static class LinkExtractor
 
         try
         {
-            var linkDoc = await GetHtmlDocumentAsync(link.Href);
+            var linkDoc = await LoadHtmlDocumentFromUrl(link.Href);
             var title = link.Title ?? GetTitle(linkDoc).IfNone(link.Href);
             var description = GetDescription(linkDoc);
 
@@ -66,41 +54,26 @@ public static class LinkExtractor
         }
     }
 
-    private static async Task<HtmlDocument> GetHtmlDocumentAsync(string link)
+    private static Option<string> GetTitle(AngleSharp.Dom.IDocument linkDoc)
     {
-        var linkRequest = (HttpWebRequest) WebRequest.Create(link);
-        linkRequest.UserAgent =
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3 Edge/16.16299";
-
-        using var linkResponse = (HttpWebResponse) await linkRequest.GetResponseAsync();
-        using var linkStream = linkResponse.GetResponseStream();
-        var linkDoc = new HtmlDocument();
-        linkDoc.Load(linkStream);
-        return linkDoc;
-    }
-
-    private static Option<string> GetTitle(HtmlDocument linkDoc)
-    {
-        var tags = new[] {"title", "h1", "h2", "h3", "h4", "h5", "h6"};
+        var tags = new[] { "title", "h1", "h2", "h3", "h4", "h5", "h6" };
 
         foreach (var tag in tags)
         {
-            var node = linkDoc.DocumentNode.Descendants(tag).FirstOrDefault();
+            var node = linkDoc.QuerySelector(tag);
 
-            if (node != null && !string.IsNullOrWhiteSpace(node.InnerText))
-                return TrimTitle(node.InnerText);
+            if (node != null && !string.IsNullOrWhiteSpace(node.TextContent))
+                return TrimTitle(node.TextContent);
         }
 
         return None;
     }
 
-
-    private static string? GetDescription(HtmlDocument linkDoc) =>
-        linkDoc.DocumentNode.Descendants("meta")
-            .Where(m => m.GetAttributeValue("name", "") == "description")
-            .Select(m => m.GetAttributeValue("content", ""))
+    private static string? GetDescription(AngleSharp.Dom.IDocument linkDoc) =>
+        linkDoc.QuerySelectorAll("meta")
+            .Where(m => m.GetAttribute("name") == "description")
+            .Select(m => m.GetAttribute("content"))
             .FirstOrDefault();
-
 
     private static async Task WriteLinkToFileAsync(string url, string title, string? description, StreamWriter writer)
     {
@@ -124,7 +97,6 @@ public static class LinkExtractor
         await writer.WriteLineAsync("Error: " + errorMessage);
         await writer.WriteLineAsync();
     }
-
 
     private static bool IsValidLink(string url, Uri rootUri) =>
         !string.IsNullOrEmpty(url) &&
