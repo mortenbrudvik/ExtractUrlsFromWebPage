@@ -17,5 +17,5 @@ var links = ExtractLinks(document, rootUri);
 
 Console.WriteLine($"Found {links.Count} links");
 
-WriteLinksToFile(links, "links.md");
+await WriteLinksToFileAsync(links, "links.md");
  
