@@ -14,8 +14,11 @@ var document = await LoadHtmlDocumentFromUrl(url);
 
 var rootUri = new Uri(url);
 var links = ExtractLinks(document, rootUri);
-
 Console.WriteLine($"Found {links.Count} links");
 
-await WriteLinksToFileAsync(links, "links.md");
+var updatedLinks = await ProcessLinks(links);
+
+await WriteLinksToFileAsync(updatedLinks, "links.md");
+
+Console.WriteLine("Done");
  
