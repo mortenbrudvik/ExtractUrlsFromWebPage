@@ -1,4 +1,5 @@
-﻿using static ExtractUrls.LinkExtractor;
+﻿using ExtractUrls;
+using static ExtractUrls.LinkExtractor;
 
 if (args.Length == 0)
 {
@@ -10,15 +11,17 @@ Console.Out.WriteLine("Processing {0}", args[0]);
 
 var url = args[0];
 
-var document = await LoadHtmlDocumentFromUrl(url);
+var doc = await LoadHtmlDocumentFromUrl(url);
+await doc.IfSomeAsync(async d =>
+{
+    var links = d.ExtractLinks(new Uri(url));
 
-var rootUri = new Uri(url);
-var links = ExtractLinks(document, rootUri);
-Console.WriteLine($"Found {links.Count} links");
+    var updatedLinks = await ProcessLinks(links);
 
-var updatedLinks = await ProcessLinks(links);
 
-await WriteLinksToFileAsync(updatedLinks, "links.md");
+    await WriteLinksToFileAsync(updatedLinks, "links.md");
+});
 
-Console.WriteLine("Done");
+
+
  

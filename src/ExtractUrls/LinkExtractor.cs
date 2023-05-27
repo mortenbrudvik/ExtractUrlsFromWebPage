@@ -2,41 +2,32 @@ using AngleSharp;
 using AngleSharp.Dom;
 using LanguageExt;
 using static LanguageExt.Prelude;
-using static ExtractUrls.LinkUtils;
 
 namespace ExtractUrls;
 
 public static class LinkExtractor
 {
-    public static async Task<IDocument?> LoadHtmlDocumentFromUrl(string url)
+    public static async Task<Option<IDocument>> LoadHtmlDocumentFromUrl(string url)
     {
-        var httpClient = new HttpClient();
-        httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.37");
-
-        var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
-
-        if (response.IsSuccessStatusCode)
+        try
         {
+            var httpClient = new HttpClient();
+            httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.37");
+
+            var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode) return null;
+        
             var pageContent = await response.Content.ReadAsStringAsync();
             var config = Configuration.Default.WithDefaultLoader();
             var context = BrowsingContext.New(config);
             var document = await context.OpenAsync(req => req.Content(pageContent));
-            return document;
+            return Some(document);
         }
-
-        return null;
-    }
-
-    public static List<Link> ExtractLinks(IDocument document, Uri rootUri)
-    {
-        return document.QuerySelectorAll("a")
-            .Where(l => IsValidLink(l.GetAttribute("href"), rootUri))
-            .Select(a => new Link
-            {
-                Href = a.GetAttribute("href"),
-                Title = TrimTitle(a.TextContent.Trim())
-            })
-            .ToList();
+        catch (Exception)
+        {
+            return None;
+        }
     }
 
     public static async Task WriteLinksToFileAsync(IEnumerable<Link> links, string fileName)
@@ -46,74 +37,35 @@ public static class LinkExtractor
         await using var writer = new StreamWriter(fileName);
         
         foreach (var link in links)
-            await WriteLinkToFileAsync(link.Href, link.Title, link.Description, writer);
+            await WriteLinkToFileAsync(link.Href, link.Title.IfNone("No title"), link.Description, writer);
+        
+        await Console.Out.WriteLineAsync($"Links written to {fileName}");
     }
     
     public static async Task<IEnumerable<Link>> ProcessLinks(IEnumerable<Link> links)
     {
         var updatedLinks = await Task.WhenAll(links.Select(link => ProcessLinkAsync(link.Href, link.Title)));
+
+        Console.Out.WriteLine("\nProcessed {0} links", updatedLinks.ToList().Count);
         
         return updatedLinks;
     }
 
-    private static async Task<Link> ProcessLinkAsync(string url, string? title)
+    private static async Task<Link> ProcessLinkAsync(string url, Option<string> title)
     {
-        try
-        {
-            var linkDoc = await LoadHtmlDocumentFromUrl(url);
-            await Console.Out.WriteAsync(".");
-            if(linkDoc == null)
-                return new Link
-                {
-                    Title = title ?? url,
-                    Description = "",
-                    Href = url
-                };
-            
-            return new Link
-            {
-                Title = title ?? GetTitle(linkDoc).IfNone(url),
-                Description = GetDescription(linkDoc),
-                Href = url
-            };
-        }
-        catch (Exception e)
-        {
-            await Console.Out.WriteAsync(".");
+        var doc = await LoadHtmlDocumentFromUrl(url);
 
-            return new Link
-            {
-                Title = title ?? url,
-                Description = e.Message,
-                Href = url
-            };
-        }
-            
-
-
-
+        var link = doc.Match(
+            d => new Link(
+                url, 
+                title.IfNone( 
+                    d.GetTitle().IfNone(url)), 
+                d.GetDescription()),
+            () => new Link(url, title.IfNone(url)));
+        
+        await Console.Out.WriteAsync(".");
+        return link;
     }
-
-    private static Option<string> GetTitle(IParentNode linkDoc)
-    {
-        var tags = new[] { "title", "h1", "h2", "h3", "h4", "h5", "h6" };
-
-        foreach (var tag in tags)
-        {
-            var node = linkDoc.QuerySelector(tag);
-
-            if (node != null && !string.IsNullOrWhiteSpace(node.TextContent))
-                return TrimTitle(node.TextContent);
-        }
-
-        return None;
-    }
-
-    private static string? GetDescription(IParentNode linkDoc) =>
-        linkDoc.QuerySelectorAll("meta")
-            .Where(m => m.GetAttribute("name") == "description")
-            .Select(m => m.GetAttribute("content"))
-            .FirstOrDefault();
 
     private static async Task WriteLinkToFileAsync(string url, string title, string? description, StreamWriter writer)
     {
@@ -125,16 +77,4 @@ public static class LinkExtractor
 
         await writer.WriteLineAsync();
     }
-
-    private static bool IsValidLink(string url, Uri rootUri) =>
-        !string.IsNullOrEmpty(url) &&
-        url.StartsWith("http") &&
-        !new Uri(url).Host.Equals(rootUri.Host);
-}
-
-public class Link
-{
-    public string Href { get; init; } = null!;
-    public string? Title { get; set; }
-    public string? Description { get; set; }
 }
